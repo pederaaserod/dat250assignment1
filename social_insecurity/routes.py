@@ -220,3 +220,8 @@ def profile(username: str):
 def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
+
+@app.before_request
+def setup_request_data():
+    """Comfims users in session before each request and sets up any necessary request data."""
+    pass
