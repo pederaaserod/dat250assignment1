@@ -17,10 +17,6 @@ from social_insecurity.database import SQLite3
 from flask_bcrypt import Bcrypt
 from flask_wtf.csrf import CSRFProtect
 
-class User(UserMixin):
-    def __init__(self, id: int):
-        self.id = id
-
 
 sqlite = SQLite3()
 # TODO: Handle login management better, maybe with flask_login?
@@ -64,7 +60,3 @@ def create_uploads_folder(app: Flask) -> None:
     upload_path = Path(app.instance_path) / cast(str, app.config["UPLOADS_FOLDER_PATH"])
     if not upload_path.exists():
         upload_path.mkdir(parents=True)
-
-def load_user(user_id: str) -> User:
-    """Load a user by ID for Flask-Login."""
-    return User(int(user_id))
