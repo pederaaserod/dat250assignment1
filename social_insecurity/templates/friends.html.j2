@@ -1,6 +1,7 @@
 {% extends "base.html.j2" %}
 {% block content %}
   <div class="container-flex justify-content-center">
+    {% if owner %}
     <div class="row justify-content-center">
       <!-- Add friend card -->
       <div class="col-sm-12 col-lg-6">
@@ -8,6 +9,7 @@
           <div class="card-body">
             <h4 class="card-title mb-3">Add a new friend</h4>
             <form action="" method="post" novalidate>
+              {{ form.hidden_tag() }}
               <div class="mb-3">{{ form.username(class_="form-control") }}</div>
               <div>{{ form.submit(class="btn btn-primary") }}</div>
             </form>
@@ -15,20 +17,38 @@
         </div>
       </div>
     </div>
+    {% endif %}
     <div class="row justify-content-center">
       <!-- Your friends card -->
       {% if friends %}
         <div class="col-sm-12 col-lg-6">
           <div class="card">
             <div class="card-body">
+              {%if owner %}
               <h4 class="card-title">Your friends</h4>
+              {% else %}
+              <h4 class="card-title">{{ username }}'s friends</h4>
+              {% endif %}
               <ul class="list-group list-group-flush">
                 {% for friend in friends %}
                   <li class="list-group-item">
-                    <a href={{ url_for('profile', username=friend.username) }}>{{ friend.username }}</a>
+                    <a href="{{ url_for('profile', username=friend.username) }}">{{ friend.username }}</a>
                   </li>
                 {% endfor %}
               </ul>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="col-sm-12 col-lg-6">
+          <div class="card">
+            <div class="card-body">
+              {%if owner %}
+              <h4 class="card-title">Your friends</h4>
+              {% else %}
+              <h4 class="card-title">{{ username }}'s friends</h4>
+              {% endif %}
+              <p class="card-text">No friends yet...</p>
             </div>
           </div>
         </div>

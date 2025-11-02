@@ -11,19 +11,20 @@
             <div class="card mb-3">
               <div class="card-header">
                 <div class="row align-items-center">
-                  <a class="col-4" href={{ url_for('profile', username=post.username) }}><span class="fa fa-user me-1" aria-hidden="true"></span>{{ post.username }}</a>
+                  <a class="col-4" href="{{ url_for('profile', username=post.username) }}"><span class="fa fa-user me-1" aria-hidden="true"></span>{{ post.username }}</a>
                   <span class="col-8 text-right">{{ post.creation_time }}</span>
                 </div>
               </div>
               <div class="card-body">
                 <p class="card-text">{{ post.content }}</p>
                 {% if post.image %}
-                  <img src={{ url_for('uploads', filename=post.image) }} alt={{ post.image }} class="img-fluid mb-3">
+                  <img src="{{ url_for('uploads', filename=post.image) }}" alt="{{ post.image }}" class="img-fluid mb-3">
                 {% endif %}
               </div>
             </div>
             <!-- Comment creation card cont -->
             <form action="" method="post" novalidate>
+              {{ form.hidden_tag() }}
               <div class="mb-3">{{ form.comment(class_="form-control") }}</div>
               <div>{{ form.submit(class_="btn btn-primary") }}</div>
             </form>
@@ -34,7 +35,7 @@
           <div class="card mb-3">
             <div class="card-header">
               <div class="row align-items-center">
-                <a class="col-4" href={{ url_for('profile', username=comment.username) }}><span class="fa fa-user me-1" aria-hidden="true"></span>{{ comment.username }}</a>
+                <a class="col-4" href="{{ url_for('profile', username=comment.username) }}"><span class="fa fa-user me-1" aria-hidden="true"></span>{{ comment.username }}</a>
                 <span class="col-8 text-right">{{ comment.creation_time }}</span>
               </div>
             </div>

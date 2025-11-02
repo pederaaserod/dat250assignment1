@@ -7,11 +7,13 @@
         <div class="card">
           <div class="card-body">
             <h4 class="card-title mb-3">About {{ username }}</h4>
+            {% if owner %}
             <button type="button"
                     class="btn btn-link mb-3"
                     onclick="switchVisibility('#edit-details', '#view-details')">
               <span class="fa fa-edit me-1" aria-hidden="true"></span>Edit
             </button>
+            {% endif %}
             <!--View profile details-->
             <div id="view-details" style="display: block;">
               <ul class="list-group list-group-flush">
@@ -62,6 +64,7 @@
             <!--Edit details-->
             <div id="edit-details" style="display: none;">
               <form action="" method="post" novalidate>
+                {{ form.hidden_tag() }}
                 <div class="mb-2">{{ form.education(class_="form-control") }}</div>
                 <div class="mb-2">{{ form.employment(class_="form-control") }}</div>
                 <div class="mb-2">{{ form.music(class_="form-control") }}</div>
