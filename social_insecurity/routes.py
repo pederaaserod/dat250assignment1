@@ -42,12 +42,24 @@ def index():
         elif user["password"] == login_form.password.data:
             return redirect(url_for("stream", username=login_form.username.data))
 
-    elif register_form.is_submitted() and register_form.submit.data:
-        insert_user = f"""
-            INSERT INTO Users (username, first_name, last_name, password)
-            VALUES ('{register_form.username.data}', '{register_form.first_name.data}', '{register_form.last_name.data}', '{register_form.password.data}');
-            """
-        sqlite.query(insert_user)
+    elif register_form.validate_on_submit() and register_form.submit.data:
+        # First check if username already exists
+        check_user = f"""
+            SELECT username
+            FROM Users
+            WHERE username = '{register_form.username.data}';
+        """
+        existing_user = sqlite.query(check_user, one=True)
+        
+        if existing_user:
+            flash("Username already exists. Please choose a different username.", category="warning")
+        else:
+            insert_user = f"""
+                INSERT INTO Users (username, first_name, last_name, password)
+                VALUES ('{register_form.username.data}', '{register_form.first_name.data}', '{register_form.last_name.data}', '{register_form.password.data}');
+                """
+            sqlite.query(insert_user)
+            flash("Registration successful! Please log in.", category="success")
         flash("User successfully created!", category="success")
         return redirect(url_for("index"))
 
