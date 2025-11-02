@@ -8,8 +8,11 @@ from pathlib import Path
 
 from flask import current_app as app
 from flask import flash, redirect, render_template, send_from_directory, url_for
+from flask_login import login_user, logout_user, current_user
+from werkzeug.utils import secure_filename
 
-from social_insecurity import sqlite
+from social_insecurity.models import User
+from social_insecurity import sqlite, bcrypt
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
 
 
@@ -26,8 +29,8 @@ def index():
     index_form = IndexForm()
     login_form = index_form.login
     register_form = index_form.register
-
-    if login_form.is_submitted() and login_form.submit.data:
+    print(login_form.validate_on_submit(), register_form.validate_on_submit())
+    if login_form.validate_on_submit() and login_form.submit.data:
         get_user = f"""
             SELECT *
             FROM Users
@@ -37,10 +40,10 @@ def index():
 
         if user is None:
             flash("Sorry, this user does not exist!", category="warning")
-        elif user["password"] != login_form.password.data:
-            flash("Sorry, wrong password!", category="warning")
-        elif user["password"] == login_form.password.data:
-            return redirect(url_for("stream", username=login_form.username.data))
+        elif bcrypt.check_password_hash(user["password"], login_form.password.data):
+            login_user(User(user["id"], user["username"]))
+            return redirect(url_for("stream", username=current_user.username))
+        flash("Sorry, wrong password!", category="warning")
 
     elif register_form.validate_on_submit() and register_form.submit.data:
         # First check if username already exists
@@ -54,17 +57,23 @@ def index():
         if existing_user:
             flash("Username already exists. Please choose a different username.", category="warning")
         else:
+            hashed_password = bcrypt.generate_password_hash(register_form.password.data).decode('utf-8')
             insert_user = f"""
                 INSERT INTO Users (username, first_name, last_name, password)
-                VALUES ('{register_form.username.data}', '{register_form.first_name.data}', '{register_form.last_name.data}', '{register_form.password.data}');
+                VALUES ('{register_form.username.data}', '{register_form.first_name.data}', '{register_form.last_name.data}', '{hashed_password}');
                 """
             sqlite.query(insert_user)
             flash("Registration successful! Please log in.", category="success")
-        flash("User successfully created!", category="success")
         return redirect(url_for("index"))
-
+    if current_user.is_authenticated:
+        return redirect(url_for("stream", username=current_user.username))
     return render_template("index.html.j2", title="Welcome", form=index_form)
 
+
+@app.route("/logout")
+def logout():
+    logout_user()
+    return redirect(url_for("index"))
 
 @app.route("/stream/<string:username>", methods=["GET", "POST"])
 def stream(username: str):
@@ -74,6 +83,8 @@ def stream(username: str):
 
     Otherwise, it reads the username from the URL and displays all posts from the user and their friends.
     """
+    owner = current_user.is_authenticated and current_user.username == username
+
     post_form = PostForm()
     get_user = f"""
         SELECT *
@@ -82,14 +93,22 @@ def stream(username: str):
         """
     user = sqlite.query(get_user, one=True)
 
-    if post_form.is_submitted():
+    if post_form.validate_on_submit():
+        if not current_user.is_authenticated:
+            flash("You must be logged in to create a post!", category="warning")
+            return redirect(url_for("index"))
+        if not current_user.username == username:
+            flash("You can only create posts on your own stream!", category="warning")
+            return redirect(url_for("stream", username=username))
+        image_filename = None
         if post_form.image.data:
-            path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / post_form.image.data.filename
+            image_filename = secure_filename(post_form.image.data.filename)
+            path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / image_filename
             post_form.image.data.save(path)
 
         insert_post = f"""
             INSERT INTO Posts (u_id, content, image, creation_time)
-            VALUES ({user["id"]}, '{post_form.content.data}', '{post_form.image.data.filename}', CURRENT_TIMESTAMP);
+            VALUES ({current_user.id}, '{post_form.content.data}', '{image_filename}', CURRENT_TIMESTAMP);
             """
         sqlite.query(insert_post)
         return redirect(url_for("stream", username=username))
@@ -101,7 +120,7 @@ def stream(username: str):
          ORDER BY p.creation_time DESC;
         """
     posts = sqlite.query(get_posts)
-    return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
+    return render_template("stream.html.j2", title="Stream", owner=owner, username=username, form=post_form, posts=posts)
 
 
 @app.route("/comments/<string:username>/<int:post_id>", methods=["GET", "POST"])
@@ -112,18 +131,17 @@ def comments(username: str, post_id: int):
 
     Otherwise, it reads the username and post id from the URL and displays all comments for the post.
     """
-    comments_form = CommentsForm()
-    get_user = f"""
-        SELECT *
-        FROM Users
-        WHERE username = '{username}';
-        """
-    user = sqlite.query(get_user, one=True)
+    owner = current_user.is_authenticated and current_user.username == username
 
-    if comments_form.is_submitted():
+    comments_form = CommentsForm()
+
+    if comments_form.validate_on_submit():
+        if not current_user.is_authenticated:
+            flash("You must be logged in to comment!", category="warning")
+            return redirect(url_for("index"))
         insert_comment = f"""
             INSERT INTO Comments (p_id, u_id, comment, creation_time)
-            VALUES ({post_id}, {user["id"]}, '{comments_form.comment.data}', CURRENT_TIMESTAMP);
+            VALUES ({post_id}, {current_user.id}, '{comments_form.comment.data}', CURRENT_TIMESTAMP);
             """
         sqlite.query(insert_comment)
 
@@ -141,7 +159,7 @@ def comments(username: str, post_id: int):
     post = sqlite.query(get_post, one=True)
     comments = sqlite.query(get_comments)
     return render_template(
-        "comments.html.j2", title="Comments", username=username, form=comments_form, post=post, comments=comments
+        "comments.html.j2", title="Comments", owner=owner, username=username, form=comments_form, post=post, comments=comments
     )
 
 
@@ -153,6 +171,8 @@ def friends(username: str):
 
     Otherwise, it reads the username from the URL and displays all friends of the user.
     """
+    owner = current_user.is_authenticated and current_user.username == username
+
     friends_form = FriendsForm()
     get_user = f"""
         SELECT *
@@ -161,7 +181,13 @@ def friends(username: str):
         """
     user = sqlite.query(get_user, one=True)
 
-    if friends_form.is_submitted():
+    if friends_form.validate_on_submit():
+        if not current_user.is_authenticated:
+            flash("You must be logged in to add friends!", category="warning")
+            return redirect(url_for("index"))
+        if not current_user.username == username:
+            flash("You can only add friends to your own account!", category="warning")
+            return redirect(url_for("friends", username=username))
         get_friend = f"""
             SELECT *
             FROM Users
@@ -195,7 +221,7 @@ def friends(username: str):
         WHERE f.u_id = {user["id"]} AND f.f_id != {user["id"]};
         """
     friends = sqlite.query(get_friends)
-    return render_template("friends.html.j2", title="Friends", username=username, friends=friends, form=friends_form)
+    return render_template("friends.html.j2", title="Friends", owner=owner, username=username, friends=friends, form=friends_form)
 
 
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
@@ -206,6 +232,8 @@ def profile(username: str):
 
     Otherwise, it reads the username from the URL and displays the user's profile.
     """
+    owner = current_user.is_authenticated and current_user.username == username
+
     profile_form = ProfileForm()
     get_user = f"""
         SELECT *
@@ -214,18 +242,24 @@ def profile(username: str):
         """
     user = sqlite.query(get_user, one=True)
 
-    if profile_form.is_submitted():
+    if profile_form.validate_on_submit():
+        if not current_user.is_authenticated:
+            flash("You must be logged in to update your profile!", category="warning")
+            return redirect(url_for("index"))
+        if not current_user.username == username:
+            flash("You can only update your own profile!", category="warning")
+            return redirect(url_for("profile", username=username))
         update_profile = f"""
             UPDATE Users
             SET education='{profile_form.education.data}', employment='{profile_form.employment.data}',
                 music='{profile_form.music.data}', movie='{profile_form.movie.data}',
                 nationality='{profile_form.nationality.data}', birthday='{profile_form.birthday.data}'
-            WHERE username='{username}';
+            WHERE id='{current_user.id}';
             """
         sqlite.query(update_profile)
         return redirect(url_for("profile", username=username))
 
-    return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
+    return render_template("profile.html.j2", title="Profile", owner=owner,  username=username, user=user, form=profile_form)
 
 
 @app.route("/uploads/<string:filename>")
@@ -237,3 +271,7 @@ def uploads(filename):
 def setup_request_data():
     """Comfims users in session before each request and sets up any necessary request data."""
     pass
+
+@app.login_manager.user_loader
+def load_user(user_id):
+    return User.get(int(user_id))
