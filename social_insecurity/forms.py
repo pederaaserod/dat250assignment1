@@ -31,7 +31,7 @@ from wtforms import (
 )
 
 from wtforms import StringField, PasswordField, SubmitField, FormField
-from wtforms.validators import DataRequired, Length, Regexp
+from wtforms.validators import DataRequired, Length, Regexp, ValidationError, EqualTo
 
 # Defines all forms in the application, these will be instantiated by the template,
 # and the routes.py will read the values of the fields
@@ -55,10 +55,32 @@ class LoginForm(FlaskForm):
 class RegisterForm(FlaskForm):
     """Provides the registration form for the application."""
 
-    first_name = StringField(label="First Name", render_kw={"placeholder": "First Name"})
-    last_name = StringField(label="Last Name", render_kw={"placeholder": "Last Name"})
-    username = StringField(label="Username", render_kw={"placeholder": "Username"})
-    password = PasswordField( 
+    first_name = StringField(
+        label="First Name",
+        render_kw={"placeholder": "First Name"},
+        validators=[
+            DataRequired(message="First name is required"),
+            Length(min=2, max=50, message="First name must be between 2 and 50 characters")
+        ]
+    )
+    last_name = StringField(
+        label="Last Name",
+        render_kw={"placeholder": "Last Name"},
+        validators=[
+            DataRequired(message="Last name is required"),
+            Length(min=2, max=50, message="Last name must be between 2 and 50 characters")
+        ]
+    )
+    username = StringField(
+        label="Username",
+        render_kw={"placeholder": "Username"},
+        validators=[
+            DataRequired(message="Username is required"),
+            Length(min=3, max=20, message="Username must be between 3 and 20 characters"),
+            Regexp(r'^[\w]+$', message="Username can only contain letters, numbers, and underscores")
+        ]
+    )
+    password = PasswordField(
         label="Password",
         render_kw={"placeholder": "Password"},
         validators=[
@@ -70,7 +92,14 @@ class RegisterForm(FlaskForm):
             )
         ]
     )    
-    confirm_password = PasswordField(label="Confirm Password", render_kw={"placeholder": "Confirm Password"})
+    confirm_password = PasswordField(
+        label="Confirm Password",
+        render_kw={"placeholder": "Confirm Password"},
+        validators=[
+            DataRequired(message="Please confirm your password"),
+            EqualTo('password', message='Passwords must match')
+        ]
+    )
     submit = SubmitField(label="Sign Up")
 
 
