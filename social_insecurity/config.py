@@ -22,7 +22,7 @@ class Config:
     SQLITE3_DATABASE_PATH = "sqlite3.db"  # Path relative to the Flask instance folder
     UPLOADS_FOLDER_PATH = "uploads"  # Path relative to the Flask instance folder
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"} #allowed extensions
-    WTF_CSRF_ENABLED = False  # TODO: I should probably implement this wtforms feature, but it's not a priority
+    WTF_CSRF_ENABLED = True  # TODO: I should probably implement this wtforms feature, but it's not a priority
     
     #Session managment og lockout tiers
     SESSION_ATTEMPT_LIMIT = 10
