@@ -28,31 +28,6 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
 
 
-@app.before_request
-#check rate limit function
-def _check_rate_limit():
-    """
-    Very cheap, early check that runs before request processing.
-    Returns JSON 429 if the limiter blocks the client.
-    """
-    # Skip static assets or health checks if needed
-    if request.path.startswith("/static") or request.path == "/health":
-        return
-
-    # Prefer Flask-Limiter if it exists
-    if app.extensions.get("flask_limiter"):
-        return
-
-    limiter = app.extensions.get("simple_rate_limiter")
-    if limiter is None:
-        return
-
-    ip = request.remote_addr or "unknown"
-    allowed = limiter.allow(ip)
-    if not allowed:
-        return jsonify({"error": "Too many requests, try again later."}), 429
-
-
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
 def index():
@@ -346,6 +321,29 @@ def load_user(user_id):
     return User.get(int(user_id))
 
 @app.before_request
+#check rate limit function
+def _check_rate_limit():
+    """
+    Very cheap, early check that runs before request processing.
+    Returns JSON 429 if the limiter blocks the client.
+    """
+    # Skip static assets or health checks if needed
+    if request.path.startswith("/static") or request.path == "/health":
+        return
+
+    # Prefer Flask-Limiter if it exists
+    if app.extensions.get("flask_limiter"):
+        return
+
+    limiter = app.extensions.get("simple_rate_limiter")
+    if limiter is None:
+        return
+
+    ip = request.remote_addr or "unknown"
+    allowed = limiter.allow(ip)
+    if not allowed:
+        return jsonify({"error": "Too many requests, try again later."}), 429
+    
 def setup_request_data():
 
     """Global session and timeout before every request."""
