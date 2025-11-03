@@ -1,17 +1,13 @@
-"""Provides all routes for the Social Insecurity application.
-
-This file contains the routes for the application. It is imported by the social_insecurity package.
-It also contains the SQL queries used for communicating with the database.
-"""
-
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import current_app as app
-from flask import flash, redirect, render_template, send_from_directory, url_for
+from flask import flash, redirect, render_template, send_from_directory, session, url_for, request
 
 from social_insecurity import sqlite
+from social_insecurity.config import Config
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
-
+import uuid
 
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
@@ -34,12 +30,15 @@ def index():
             WHERE username = '{login_form.username.data}';
             """
         user = sqlite.query(get_user, one=True)
-
         if user is None:
-            flash("Sorry, this user does not exist!", category="warning")
+            flash("Invalid username or password!", category="warning")
+            record_session_failure()
         elif user["password"] != login_form.password.data:
-            flash("Sorry, wrong password!", category="warning")
-        elif user["password"] == login_form.password.data:
+            flash("Invalid username or password!", category="warning")
+            record_session_failure()
+        else:
+            reset_session_counter()
+            session["username"] = login_form.username.data
             return redirect(url_for("stream", username=login_form.username.data))
 
     elif register_form.is_submitted() and register_form.submit.data:
@@ -51,7 +50,15 @@ def index():
         flash("User successfully created!", category="success")
         return redirect(url_for("index"))
 
-    return render_template("index.html.j2", title="Welcome", form=index_form)
+    # Før loginforsøk – blokker hvis låst
+    sess = session.get("login", {})
+    locked_until = sess.get("locked_until")
+    if locked_until:
+        locked_until_dt = datetime.fromisoformat(locked_until)
+        if locked_until_dt > datetime.now(timezone.utc):
+            flash("Too many failed login attempts. Please try again later.", category="warning")
+            return render_template("index.html.j2", title="Welcome", form=index_form)
+
 
 
 @app.route("/stream/<string:username>", methods=["GET", "POST"])
@@ -221,7 +228,68 @@ def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
 
+
 @app.before_request
 def setup_request_data():
-    """Comfims users in session before each request and sets up any necessary request data."""
-    pass
+
+    """Global session and timeout before every request."""
+    sess = session.setdefault("login", {})
+    now = datetime.now(timezone.utc)
+    current_user = session.get("username")
+
+    # SKIP OPEN ENDPOINTS (important!)
+    open_endpoints = ("index", "static", "uploads")
+    if request.endpoint in open_endpoints:
+        return  # Do not perform login or access checks here
+
+    # Access control (only applies to logged-in routes)
+    if request.endpoint and any(name in request.endpoint for name in ("profile", "stream", "friends", "comments")):
+        url_username = (request.view_args or {}).get("username")
+        current_user = session.get("username")
+        if url_username and current_user and current_user != url_username:
+            flash("Access denied.", category="danger")
+            return redirect(url_for("index"))
+
+    # UUID setup
+    if "uuid" not in sess:
+        sess["uuid"] = str(uuid.uuid4())
+        session["login"] = sess
+    else:
+        client_uuid = sess["uuid"]
+        if client_uuid != sess.get("uuid"):
+            session.clear()
+            flash("Session invalid. Please log in again.", category="warning")
+            return redirect(url_for("index"))
+
+    # Lockout check
+    locked_until = sess.get("locked_until")
+    if locked_until:
+        locked_until_dt = datetime.fromisoformat(locked_until)
+        if locked_until_dt > now:
+            flash("Too many failed login attempts. Please try again later.", category="warning")
+            return redirect(url_for("index"))
+
+    # Timeout tracking
+    sess["last_seen"] = now.isoformat()
+    session["login"] = sess
+
+
+
+def record_session_failure():
+    sess = session.setdefault("login", {})
+    sess["attempts"] = sess.get("attempts", 0) + 1
+
+    if sess["attempts"] >= Config.SESSION_ATTEMPT_LIMIT:
+        tier_index = min(sess["attempts"] - Config.SESSION_ATTEMPT_LIMIT, len(Config.LOCKOUT_TIERS) - 1)
+        lock_duration = Config.LOCKOUT_TIERS[tier_index]
+        sess["locked_until"] = (datetime.now(timezone.utc) + lock_duration).isoformat()
+
+    session["login"] = sess
+
+
+def reset_session_counter():
+    sess = session.setdefault("login", {})
+    sess.pop("attempts", None)
+    sess.pop("locked_until", None)
+    session["login"] = sess
+
