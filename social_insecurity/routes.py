@@ -41,7 +41,6 @@ def index():
     index_form = IndexForm()
     login_form = index_form.login
     register_form = index_form.register
-    print(login_form.validate_on_submit(), register_form.validate_on_submit())
     if login_form.validate_on_submit() and login_form.submit.data:
         get_user = f"""
             SELECT *
@@ -53,15 +52,14 @@ def index():
         if user is None:
             flash("Sorry, this user does not exist!", category="warning")
             record_session_failure()
-        elif bcrypt.check_password_hash(user["password"], login_form.password.data):
-            login_user(User(user["id"], user["username"]))
+        elif not bcrypt.check_password_hash(user["password"], login_form.password.data):
             flash("Sorry, wrong password!", category="warning")
             record_session_failure()
         else:
+            login_user(User(user["id"], user["username"]))
             reset_session_counter()
-            session["username"] = login_form.username.data
+            session["username"] = user["username"]
             return redirect(url_for("stream", username=current_user.username))
-    
 
     elif register_form.validate_on_submit() and register_form.submit.data:
         get_user = f"""
@@ -160,7 +158,7 @@ def stream(username: str):
          ORDER BY p.creation_time DESC;
         """
     posts = sqlite.query(get_posts, user["id"], user["id"], user["id"])
-    return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
+    return render_template("stream.html.j2", title="Stream", owner=owner, username=username, form=post_form, posts=posts)
 
 
 @app.route("/comments/<string:username>/<int:post_id>", methods=["GET", "POST"])
