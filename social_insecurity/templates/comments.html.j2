@@ -17,7 +17,7 @@
               </div>
               <div class="card-body">
                 <p class="card-text">{{ post.content }}</p>
-                {% if post.image %}
+                {% if post.image != "None" %}
                   <img src="{{ url_for('uploads', filename=post.image) }}" alt="{{ post.image }}" class="img-fluid mb-3">
                 {% endif %}
               </div>
