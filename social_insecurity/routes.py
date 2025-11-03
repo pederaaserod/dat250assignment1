@@ -81,7 +81,7 @@ def index():
         register_form.username.data,
         register_form.first_name.data,
         register_form.last_name.data,
-        register_form.password.data,
+        bcrypt.generate_password_hash(register_form.password.data).decode("utf-8"),
         )
 
         sess = session.get("login", {})
