@@ -86,9 +86,9 @@ def index():
         locked_until = sess.get("locked_until")
         if locked_until:
             locked_until_dt = datetime.fromisoformat(locked_until)
-        if locked_until_dt > datetime.now(timezone.utc):
-            flash("Too many failed login attempts. Please try again later.", category="warning")
-            return render_template("index.html.j2", title="Welcome", form=index_form)
+            if locked_until_dt > datetime.now(timezone.utc):
+                flash("Too many failed login attempts. Please try again later.", category="warning")
+                return render_template("index.html.j2", title="Welcome", form=index_form)
         flash("User successfully created!", category="success")
         return redirect(url_for("index"))
     if current_user.is_authenticated:
@@ -118,7 +118,7 @@ def stream(username: str):
         WHERE username = ?;
         """
     user = sqlite.query(get_user, username, one=True)
-
+    filename = None
     if post_form.validate_on_submit():
         if not current_user.is_authenticated:
             flash("You must be logged in to create a post!", category="warning")
@@ -142,11 +142,13 @@ def stream(username: str):
             file_path = upload_dir / filename
             post_form.image.data.save(file_path)
 
+
         insert_post = """
             INSERT INTO Posts (u_id, content, image, creation_time)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP);
             """
-        sqlite.query(insert_post, user["id"], post_form.content.data, post_form.image.data.filename)
+        print(post_form.image.data)
+        sqlite.query(insert_post, user["id"], post_form.content.data, filename)
         return redirect(url_for("stream", username=username))
 
     get_posts = """
@@ -344,7 +346,8 @@ def _check_rate_limit():
     allowed = limiter.allow(ip)
     if not allowed:
         return jsonify({"error": "Too many requests, try again later."}), 429
-    
+
+@app.before_request 
 def setup_request_data():
 
     """Global session and timeout before every request."""
@@ -393,7 +396,6 @@ def setup_request_data():
 def record_session_failure():
     sess = session.setdefault("login", {})
     sess["attempts"] = sess.get("attempts", 0) + 1
-
     if sess["attempts"] >= Config.SESSION_ATTEMPT_LIMIT:
         tier_index = min(sess["attempts"] - Config.SESSION_ATTEMPT_LIMIT, len(Config.LOCKOUT_TIERS) - 1)
         lock_duration = Config.LOCKOUT_TIERS[tier_index]
