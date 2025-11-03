@@ -14,6 +14,7 @@ Example:
 """
 
 import os
+from datetime import timedelta
 
 
 class Config:
@@ -22,3 +23,16 @@ class Config:
     UPLOADS_FOLDER_PATH = "uploads"  # Path relative to the Flask instance folder
     ALLOWED_EXTENSIONS = {}  # TODO: Might use this at some point, probably don't want people to upload any file type
     WTF_CSRF_ENABLED = False  # TODO: I should probably implement this wtforms feature, but it's not a priority
+    
+    #Session managment og lockout tiers
+    SESSION_ATTEMPT_LIMIT = 10
+    SESSION_TIMEOUT = timedelta(minutes=30)
+    SESSION_LOCK_DURATION = timedelta(minutes=5)
+
+    LOCKOUT_THERESHOLD = 5
+    LOCKOUT_TIERS=[
+        timedelta(minutes=1),
+        timedelta(minutes=5),
+        timedelta(minutes=15),
+        timedelta(hours=1),
+]
