@@ -64,8 +64,14 @@ def index():
     
 
     elif register_form.validate_on_submit() and register_form.submit.data:
-        if user is None:
-            flash("Sorry, this user does not exist!", category="warning")
+        get_user = f"""
+            SELECT *
+            FROM Users
+            WHERE username = ?;
+            """
+        user = sqlite.query(get_user, login_form.username.data, one=True)
+        if user is not None:
+            flash("Sorry, this username is already taken!", category="warning")
         insert_user = """
             INSERT INTO Users (username, first_name, last_name, password)
             VALUES (?, ?, ?, ?);
