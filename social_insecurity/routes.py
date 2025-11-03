@@ -6,7 +6,7 @@ It also contains the SQL queries used for communicating with the database.
 
 from pathlib import Path
 from flask import current_app as app
-from flask import flash, redirect, render_template, send_from_directory, url_for, session, request
+from flask import flash, redirect, render_template, send_from_directory, url_for, session, request,jsonify
 from flask_login import login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 from social_insecurity.models import User
@@ -15,6 +15,43 @@ from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostFo
 from social_insecurity.config import Config
 from datetime import datetime, timedelta, timezone
 import uuid
+
+#imports for file uploading
+import os
+import time
+import uuid
+from werkzeug.utils import secure_filename
+
+#allowed files from config
+def allowed_file(filename):
+    allowed_extensions = app.config["ALLOWED_EXTENSIONS"]
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
+
+
+@app.before_request
+#check rate limit function
+def _check_rate_limit():
+    """
+    Very cheap, early check that runs before request processing.
+    Returns JSON 429 if the limiter blocks the client.
+    """
+    # Skip static assets or health checks if needed
+    if request.path.startswith("/static") or request.path == "/health":
+        return
+
+    # Prefer Flask-Limiter if it exists
+    if app.extensions.get("flask_limiter"):
+        return
+
+    limiter = app.extensions.get("simple_rate_limiter")
+    if limiter is None:
+        return
+
+    ip = request.remote_addr or "unknown"
+    allowed = limiter.allow(ip)
+    if not allowed:
+        return jsonify({"error": "Too many requests, try again later."}), 429
+
 
 @app.route("/", methods=["GET", "POST"])
 @app.route("/index", methods=["GET", "POST"])
@@ -112,17 +149,28 @@ def stream(username: str):
         if not current_user.username == username:
             flash("You can only create posts on your own stream!", category="warning")
             return redirect(url_for("stream", username=username))
-        image_filename = None
         if post_form.image.data:
-            image_filename = secure_filename(post_form.image.data.filename)
-            path = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"] / image_filename
-            post_form.image.data.save(path)
+            original_name = secure_filename(post_form.image.data.filename)
+            name, ext = os.path.splitext(original_name)
+            unique_id = uuid.uuid4().hex[:8]  # short random identifier
+            filename = f"{username}_{int(time.time())}_{unique_id}{ext}"
+
+            if not allowed_file(filename):
+                flash("Invalid file type. Only PNG, JPG, JPEG, and GIF are allowed.", category="danger")
+                return redirect(url_for("stream", username=username))
+
+            upload_dir = Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"]
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            file_path = upload_dir / filename
+            post_form.image.data.save(file_path)
 
         insert_post = """
             INSERT INTO Posts (u_id, content, image, creation_time)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP);
             """
         sqlite.query(insert_post, user["id"], post_form.content.data, post_form.image.data.filename)
+
         return redirect(url_for("stream", username=username))
 
     get_posts = """
