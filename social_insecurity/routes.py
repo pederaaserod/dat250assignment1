@@ -110,8 +110,6 @@ def index():
         if locked_until_dt > datetime.now(timezone.utc):
             flash("Too many failed login attempts. Please try again later.", category="warning")
             return render_template("index.html.j2", title="Welcome", form=index_form)
-
-
         flash("User successfully created!", category="success")
         return redirect(url_for("index"))
     if current_user.is_authenticated:
@@ -170,7 +168,6 @@ def stream(username: str):
             VALUES (?, ?, ?, CURRENT_TIMESTAMP);
             """
         sqlite.query(insert_post, user["id"], post_form.content.data, post_form.image.data.filename)
-
         return redirect(url_for("stream", username=username))
 
     get_posts = """
